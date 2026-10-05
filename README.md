@@ -60,13 +60,15 @@ pip install -r requirements.txt
 
 Place `freMTPL2freq.csv` inside `fedactuary/data/freMTPL2freq.csv`.
 
-### 3. One-Command Production Pipeline
+### 3. One-Command Production Pipeline (with Pause & Resume)
 
 Execute the full production pipeline across all 678,013 policies in one command:
 
 ```bash
 python run_pipeline.py
 ```
+
+> **⏸️ Automatic Pause & Resume**: You can interrupt training at any time (e.g., closing your terminal, switching off your computer, or power cuts). The pipeline automatically saves checkpoint state every 10 rounds/epochs. When you run `python run_pipeline.py` again, it detects your progress and **resumes seamlessly from the exact round and phase where you stopped** — behaving identically to an uninterrupted single run. To force starting fresh, pass `--no-resume`.
 
 Or execute individual phases modularly on the full dataset:
 ```bash

@@ -19,7 +19,7 @@ import torch
 from src.data import (load_raw_features, save_preprocessing_artifacts,
                        split_and_scale, split_for_clients)
 from src.model import MultipleRegression
-from src.train import Client, evaluate, run_federated
+from src.train import Client, evaluate, run_federated, safe_load_torch
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CKPT_DIR = os.path.join(BASE_DIR, "checkpoints")
@@ -46,38 +46,69 @@ def main(cfg):
     results = {"config": vars(cfg)}
 
     # ---------------- Global: one model, all pooled training data ----------------
-    # Epoch budget matches cfg.rounds, not cfg.epochs: Federated effectively
-    # sweeps the full pooled dataset once per round (10 clients x 1/10 the
-    # data each, averaged), cfg.rounds times over. Comparing Global at only
-    # cfg.epochs would be an unfair, apples-to-oranges baseline -- caught by
-    # actually running it (Global scored below Federated, which should be
-    # structurally impossible; see PRD Change Log).
     global_epochs = cfg.rounds
-    print(f"\n[global] training ({global_epochs} epochs, matched to Federated's round budget) ...")
+    global_final_ckpt = os.path.join(CKPT_DIR, "global.pt")
+    global_resume_ckpt = os.path.join(CKPT_DIR, "p1_global_resume.pt")
     g_client = Client(X_tr, y_tr, num_features, lr=cfg.lr, batch_size=cfg.batch_size, seed=cfg.seed)
-    g_client.fit(global_epochs)
-    g_metrics = evaluate(g_client.model, X_te, y_te, e_te)
-    torch.save(g_client.model.state_dict(), os.path.join(CKPT_DIR, "global.pt"))
-    print(f"[global] test %PDE={g_metrics['pde']:.2f}  Gini={g_metrics['gini']:.3f}")
-    results["global"] = g_metrics
+
+    if cfg.resume and os.path.exists(global_final_ckpt) and not os.path.exists(global_resume_ckpt):
+        print(f"\n[RESUME] Global baseline model already completed ({global_final_ckpt}). Loading...")
+        g_client.model.load_state_dict(safe_load_torch(global_final_ckpt))
+        g_metrics = evaluate(g_client.model, X_te, y_te, e_te)
+        print(f"[global] test %PDE={g_metrics['pde']:.2f}  Gini={g_metrics['gini']:.3f}")
+        results["global"] = g_metrics
+    else:
+        start_ep = 1
+        if cfg.resume and os.path.exists(global_resume_ckpt):
+            try:
+                g_save = safe_load_torch(global_resume_ckpt)
+                start_ep = g_save.get("epoch", 0) + 1
+                g_client.load_state(g_save["state"])
+                print(f"\n[RESUME] Resuming Global model from epoch {start_ep}/{global_epochs}...")
+            except Exception as e:
+                print(f"[WARN] Could not read Global resume checkpoint: {e}. Starting fresh.")
+
+        if start_ep <= global_epochs:
+            print(f"\n[global] training ({global_epochs} epochs, starting from {start_ep}) ...")
+            def on_g_epoch(ep, loss):
+                if ep % cfg.log_every == 0 or ep == global_epochs:
+                    torch.save({"epoch": ep, "state": g_client.get_state()}, global_resume_ckpt)
+                    print(f"  epoch {ep:>4}/{global_epochs}: train_loss={loss:.4f}")
+
+            g_client.fit_epochs(global_epochs, on_epoch=on_g_epoch, start_epoch=start_ep)
+            if os.path.exists(global_resume_ckpt):
+                try:
+                    os.remove(global_resume_ckpt)
+                except Exception:
+                    pass
+
+        g_metrics = evaluate(g_client.model, X_te, y_te, e_te)
+        torch.save(g_client.model.state_dict(), global_final_ckpt)
+        print(f"[global] test %PDE={g_metrics['pde']:.2f}  Gini={g_metrics['gini']:.3f}")
+        results["global"] = g_metrics
 
     # ---------------- Partial: 10 independent models, no collaboration ----------------
-    # Same fairness fix as Global: each Federated client accumulates
-    # cfg.rounds x cfg.epochs of local training on its own shard over the
-    # course of the run (with periodic re-sync in between). An isolated
-    # Partial insurer has no sync to lean on, so it needs that same total
-    # local-epoch budget to be a fair comparison, not just cfg.epochs.
     partial_epochs = cfg.rounds * cfg.epochs
     print(f"\n[partial] training 10 independent insurers ({partial_epochs} epochs each) ...")
     shards = split_for_clients(X_tr, y_tr, e_tr, cfg.num_insurers, seed=cfg.seed)
     partial_pdes = []
     for i, (Xs, ys, es) in enumerate(shards):
-        c = Client(Xs, ys, num_features, lr=cfg.lr, batch_size=min(cfg.batch_size, len(Xs)), seed=cfg.seed + i)
-        c.fit(partial_epochs)
-        m = evaluate(c.model, X_te, y_te, e_te)
-        partial_pdes.append(m["pde"])
-        torch.save(c.model.state_dict(), os.path.join(CKPT_DIR, f"partial_{i}.pt"))
-        print(f"  insurer {i}: n={len(Xs):>6}  %PDE={m['pde']:.2f}  Gini={m['gini']:.3f}")
+        p_ckpt = os.path.join(CKPT_DIR, f"partial_{i}.pt")
+        if cfg.resume and os.path.exists(p_ckpt):
+            print(f"  [RESUME] Insurer {i} already trained ({p_ckpt}). Loading...")
+            c = Client(Xs, ys, num_features)
+            c.model.load_state_dict(safe_load_torch(p_ckpt))
+            m = evaluate(c.model, X_te, y_te, e_te)
+            partial_pdes.append(m["pde"])
+            print(f"  insurer {i}: n={len(Xs):>6}  %PDE={m['pde']:.2f}  Gini={m['gini']:.3f}")
+        else:
+            c = Client(Xs, ys, num_features, lr=cfg.lr, batch_size=min(cfg.batch_size, len(Xs)), seed=cfg.seed + i)
+            c.fit(partial_epochs)
+            m = evaluate(c.model, X_te, y_te, e_te)
+            partial_pdes.append(m["pde"])
+            torch.save(c.model.state_dict(), p_ckpt)
+            print(f"  insurer {i}: n={len(Xs):>6}  %PDE={m['pde']:.2f}  Gini={m['gini']:.3f}")
+
     results["partial"] = {"pde_avg": float(np.mean(partial_pdes)), "pde_best": float(np.max(partial_pdes)),
                            "pde_per_insurer": partial_pdes}
     print(f"[partial] avg %PDE={results['partial']['pde_avg']:.2f}  best={results['partial']['pde_best']:.2f}")
@@ -89,9 +120,20 @@ def main(cfg):
     history = []
     def log(rec):
         history.append(rec)
-        print(f"  round {rec['round']:>4}: train_loss={rec['train_loss']:.4f}  "
+        print(f"  round {rec['round']:>4}/{cfg.rounds}: train_loss={rec['train_loss']:.4f}  "
               f"test %PDE={rec['pde']:.2f}  Gini={rec['gini']:.3f}")
-    fed_model, _ = run_federated(clients, cfg.rounds, cfg.epochs, test, log_every=cfg.log_every, on_round=log)
+
+    fed_resume_ckpt = os.path.join(CKPT_DIR, "p1_federated_resume.pt")
+    fed_model, history = run_federated(
+        clients,
+        cfg.rounds,
+        cfg.epochs,
+        test,
+        log_every=cfg.log_every,
+        on_round=log,
+        resume_checkpoint_path=fed_resume_ckpt if cfg.resume else None,
+        save_checkpoint_path=fed_resume_ckpt if cfg.resume else None
+    )
     torch.save(fed_model.state_dict(), os.path.join(CKPT_DIR, "federated.pt"))
     results["federated"] = {"history": history, "final": history[-1] if history else None}
 
@@ -102,7 +144,6 @@ def main(cfg):
     if history:
         import pandas as pd
         pd.DataFrame(history).to_csv(os.path.join(RESULTS_DIR, "phase1_federated_rounds.csv"), index=False)
-
 
     elapsed = time.time() - t0
     run_desc = "Full 678K run" if cfg.n_rows is None else f"Dataset n={cfg.n_rows}"
@@ -127,5 +168,7 @@ if __name__ == "__main__":
     p.add_argument("--lr", type=float, default=0.001)
     p.add_argument("--log_every", type=int, default=10)
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--resume", action="store_true", default=True, help="Automatically resume interrupted training")
+    p.add_argument("--no-resume", dest="resume", action="store_false", help="Force starting fresh from round 1")
     main(p.parse_args())
 

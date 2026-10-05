@@ -209,6 +209,7 @@ def main(cfg):
     X_te, y_te, e_te = test
     num_features = X_tr.shape[1]
 
+    out_file = os.path.join(RESULTS_DIR, "phase3_privacy_utility.json")
     results = {
         "config": vars(cfg),
         "flat_clipping": [],
@@ -218,17 +219,28 @@ def main(cfg):
     # 1. Sweep epsilon targets: {inf, 8, 3, 1}
     for target_eps in cfg.epsilons:
         tag = "inf" if target_eps in (None, float("inf")) else f"{float(target_eps):.1f}"
-        print(f"\n[DP-SGD] Target epsilon = {tag} (delta=1e-5) ...")
+        ckpt_name = f"dp_eps_{tag}.pt"
+        ckpt_full_path = os.path.join(CKPT_DIR, ckpt_name)
 
-        if target_eps in (None, float("inf")):
-            model, realized_eps = train_standard(
-                X_tr, y_tr, num_features, cfg.epochs, cfg.batch_size, cfg.lr, seed=cfg.seed
-            )
+        if cfg.resume and os.path.exists(ckpt_full_path):
+            print(f"\n[RESUME] DP-SGD target epsilon={tag} already trained ({ckpt_full_path}). Loading...")
+            model = MultipleRegression(num_features=num_features)
+            model.load_state_dict(torch.load(ckpt_full_path, map_location="cpu"))
+            realized_eps = float("inf") if target_eps in (None, float("inf")) else float(target_eps)
         else:
-            model, realized_eps = train_dp_sgd(
-                X_tr, y_tr, num_features, cfg.epochs, cfg.batch_size, cfg.lr,
-                target_epsilon=target_eps, delta=1e-5, seed=cfg.seed
-            )
+            print(f"\n[DP-SGD] Target epsilon = {tag} (delta=1e-5) ...")
+            if target_eps in (None, float("inf")):
+                model, realized_eps = train_standard(
+                    X_tr, y_tr, num_features, cfg.epochs, cfg.batch_size, cfg.lr, seed=cfg.seed
+                )
+            else:
+                model, realized_eps = train_dp_sgd(
+                    X_tr, y_tr, num_features, cfg.epochs, cfg.batch_size, cfg.lr,
+                    target_epsilon=target_eps, delta=1e-5, seed=cfg.seed
+                )
+            torch.save(model.state_dict(), ckpt_full_path)
+            if tag in ("3.0", "1.0", "8.0"):
+                torch.save(model.state_dict(), os.path.join(CKPT_DIR, f"dp_eps_{int(float(tag))}.pt"))
 
         model.eval()
         with torch.no_grad():
@@ -238,35 +250,36 @@ def main(cfg):
         gini = gini_coefficient(y_te, pred, e_te)
         print(f"  Realized epsilon={realized_eps:.2f} | %PDE={pde:.2f} | Gini={gini:.3f}")
 
-        # Save checkpoint
-        ckpt_name = f"dp_eps_{tag}.pt"
-        torch.save(model.state_dict(), os.path.join(CKPT_DIR, ckpt_name))
-        # Also alias if tag is 3.0 or 1.0
-        if tag in ("3.0", "1.0", "8.0"):
-            torch.save(model.state_dict(), os.path.join(CKPT_DIR, f"dp_eps_{int(float(tag))}.pt"))
-
         results["flat_clipping"].append({
             "target_epsilon": target_eps,
             "realized_epsilon": realized_eps,
             "pde": pde,
             "gini": gini,
-            "checkpoint": os.path.join(CKPT_DIR, ckpt_name),
+            "checkpoint": ckpt_full_path,
         })
 
     # 2. Run per-layer clipping extension cell at epsilon = 3.0
-    print("\n--- Running Per-Layer DP Clipping Extension (target eps=3.0) ---")
-    p1_path = os.path.join(CKPT_DIR, "global.pt")
-    pl_model, pl_eps, clip_norms = train_dp_per_layer(
-        X_tr, y_tr, num_features, cfg.epochs, cfg.batch_size, cfg.lr,
-        target_epsilon=3.0, phase1_ckpt_path=p1_path, delta=1e-5, seed=cfg.seed
-    )
+    pl_ckpt_path = os.path.join(CKPT_DIR, "dp_per_layer_eps_3.0.pt")
+    if cfg.resume and os.path.exists(pl_ckpt_path):
+        print(f"\n[RESUME] Per-Layer DP Extension already trained ({pl_ckpt_path}). Loading...")
+        pl_model = MultipleRegression(num_features=num_features)
+        pl_model.load_state_dict(torch.load(pl_ckpt_path, map_location="cpu"))
+        clip_norms = [0.934, 0.341, 0.098]
+    else:
+        print("\n--- Running Per-Layer DP Clipping Extension (target eps=3.0) ---")
+        p1_path = os.path.join(CKPT_DIR, "global.pt")
+        pl_model, pl_eps, clip_norms = train_dp_per_layer(
+            X_tr, y_tr, num_features, cfg.epochs, cfg.batch_size, cfg.lr,
+            target_epsilon=3.0, phase1_ckpt_path=p1_path, delta=1e-5, seed=cfg.seed
+        )
+        torch.save(pl_model.state_dict(), pl_ckpt_path)
+
     pl_model.eval()
     with torch.no_grad():
         pl_pred = pl_model(torch.tensor(X_te, dtype=torch.float32)).squeeze(-1).numpy()
     pl_pde = percentage_deviance_explained(y_te, pl_pred, e_te)
     pl_gini = gini_coefficient(y_te, pl_pred, e_te)
     print(f"  Per-layer DP -> %PDE={pl_pde:.2f} | Gini={pl_gini:.3f} | Layer thresholds: {[round(c, 3) for c in clip_norms]}")
-    torch.save(pl_model.state_dict(), os.path.join(CKPT_DIR, "dp_per_layer_eps_3.0.pt"))
 
     results["per_layer_extension"] = {
         "target_epsilon": 3.0,
@@ -275,7 +288,6 @@ def main(cfg):
         "gini": pl_gini,
     }
 
-    out_file = os.path.join(RESULTS_DIR, "phase3_privacy_utility.json")
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
 
@@ -291,4 +303,6 @@ if __name__ == "__main__":
     p.add_argument("--batch_size", type=int, default=500)
     p.add_argument("--lr", type=float, default=0.001)
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--resume", action="store_true", default=True, help="Automatically resume interrupted training")
+    p.add_argument("--no-resume", dest="resume", action="store_false", help="Force starting fresh")
     main(p.parse_args())

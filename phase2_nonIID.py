@@ -62,17 +62,40 @@ def main(cfg):
 
     print(f"[Phase 2] train={len(X_tr)} test={len(X_te)} features={X_tr.shape[1]}")
 
+    out_file = os.path.join(RESULTS_DIR, "phase2_heterogeneity.json")
     results = {
         "config": vars(cfg),
         "label_shift_claimnb": [],
         "feature_shift_region": [],
     }
 
+    # Load previously completed sweeps if resuming
+    if cfg.resume and os.path.exists(out_file):
+        try:
+            with open(out_file, "r", encoding="utf-8") as f:
+                saved_res = json.load(f)
+                results["label_shift_claimnb"] = saved_res.get("label_shift_claimnb", [])
+                results["feature_shift_region"] = saved_res.get("feature_shift_region", [])
+                print(f"[RESUME] Loaded existing Phase 2 results ({len(results['label_shift_claimnb'])} claim sweeps, {len(results['feature_shift_region'])} region sweeps)")
+        except Exception as e:
+            print(f"[WARN] Could not load existing Phase 2 results: {e}")
+
+    # Helper to check if a sweep was already completed
+    def is_sweep_done(category, alpha_val, mu_val):
+        for entry in results.get(category, []):
+            if abs(entry.get("alpha", 0.0) - alpha_val) < 1e-4 and abs(entry.get("mu", 0.0) - mu_val) < 1e-4:
+                return True
+        return False
+
     # 1. Sweep ClaimNb label-shift: alpha in {0.1, 0.5, 1, 5} x {FedAvg, FedProx}
     print("\n--- Running ClaimNb Label-Shift Sweep ---")
     for alpha in cfg.alphas:
         for mu in cfg.mus:
             method_name = "FedAvg" if mu == 0.0 else f"FedProx(mu={mu})"
+            if cfg.resume and is_sweep_done("label_shift_claimnb", alpha, mu):
+                print(f"[RESUME] ClaimNb Split alpha={alpha} | method={method_name} already completed. Skipping...")
+                continue
+
             print(f"\n[ClaimNb Split] alpha={alpha} | method={method_name}")
             clients, summary, parts = build_clients(
                 X_tr, y_tr, e_tr, claimnb_tr, cfg.num_insurers, alpha, cfg.lr, cfg.batch_size, cfg.seed
@@ -80,8 +103,11 @@ def main(cfg):
             sizes = [s["n"] for s in summary]
             print(f"  Client sample sizes: min={min(sizes)}, max={max(sizes)}, total={sum(sizes)}")
 
+            sweep_resume_ckpt = os.path.join(CKPT_DIR, f"p2_claimnb_a{alpha}_m{mu}_resume.pt")
             model, history = run_federated(
-                clients, cfg.rounds, cfg.epochs, test, log_every=cfg.log_every, mu=mu
+                clients, cfg.rounds, cfg.epochs, test, log_every=cfg.log_every, mu=mu,
+                resume_checkpoint_path=sweep_resume_ckpt if cfg.resume else None,
+                save_checkpoint_path=sweep_resume_ckpt if cfg.resume else None
             )
             final = history[-1] if history else {"pde": float("nan"), "gini": float("nan")}
             print(f"  Result -> %PDE={final['pde']:.2f} | Gini={final['gini']:.3f}")
@@ -98,11 +124,14 @@ def main(cfg):
             }
             results["label_shift_claimnb"].append(res_entry)
 
+            # Persist intermediate sweep progress
+            with open(out_file, "w", encoding="utf-8") as f:
+                json.dump(results, f, indent=2)
+
             # Save canonical non-IID checkpoint at alpha=0.5 (used by Phase 4 & Phase 5)
             if alpha == 0.5 and mu == 0.0:
                 ckpt_path = os.path.join(CKPT_DIR, "non_iid_alpha_0.5.pt")
                 torch.save(model.state_dict(), ckpt_path)
-                # Also save alias
                 torch.save(model.state_dict(), os.path.join(CKPT_DIR, "non_iid_claimnb_0.5.pt"))
                 print(f"  Saved checkpoint: {ckpt_path}")
 
@@ -110,6 +139,10 @@ def main(cfg):
     print("\n--- Running Region Feature-Shift (alpha=0.5) ---")
     for mu in cfg.mus:
         method_name = "FedAvg" if mu == 0.0 else f"FedProx(mu={mu})"
+        if cfg.resume and is_sweep_done("feature_shift_region", 0.5, mu):
+            print(f"[RESUME] Region Split alpha=0.5 | method={method_name} already completed. Skipping...")
+            continue
+
         print(f"\n[Region Split] alpha=0.5 | method={method_name}")
         clients, summary, parts = build_clients(
             X_tr, y_tr, e_tr, region_tr, cfg.num_insurers, 0.5, cfg.lr, cfg.batch_size, cfg.seed
@@ -117,8 +150,11 @@ def main(cfg):
         sizes = [s["n"] for s in summary]
         print(f"  Client sample sizes: min={min(sizes)}, max={max(sizes)}, total={sum(sizes)}")
 
+        sweep_resume_ckpt = os.path.join(CKPT_DIR, f"p2_region_a0.5_m{mu}_resume.pt")
         model, history = run_federated(
-            clients, cfg.rounds, cfg.epochs, test, log_every=cfg.log_every, mu=mu
+            clients, cfg.rounds, cfg.epochs, test, log_every=cfg.log_every, mu=mu,
+            resume_checkpoint_path=sweep_resume_ckpt if cfg.resume else None,
+            save_checkpoint_path=sweep_resume_ckpt if cfg.resume else None
         )
         final = history[-1] if history else {"pde": float("nan"), "gini": float("nan")}
         print(f"  Result -> %PDE={final['pde']:.2f} | Gini={final['gini']:.3f}")
@@ -135,9 +171,8 @@ def main(cfg):
         }
         results["feature_shift_region"].append(res_entry)
 
-    out_file = os.path.join(RESULTS_DIR, "phase2_heterogeneity.json")
-    with open(out_file, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2)
+        with open(out_file, "w", encoding="utf-8") as f:
+            json.dump(results, f, indent=2)
 
     elapsed = time.time() - t0
     print(f"\nPhase 2 completed in {elapsed:.1f}s. Saved {out_file}")
@@ -155,4 +190,6 @@ if __name__ == "__main__":
     p.add_argument("--lr", type=float, default=0.001)
     p.add_argument("--log_every", type=int, default=5)
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--resume", action="store_true", default=True, help="Automatically resume interrupted sweeps")
+    p.add_argument("--no-resume", dest="resume", action="store_false", help="Force starting fresh")
     main(p.parse_args())

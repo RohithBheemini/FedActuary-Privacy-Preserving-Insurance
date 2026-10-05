@@ -40,14 +40,33 @@ class Client:
     def set_weights(self, state_dict):
         self.model.load_state_dict(state_dict)
 
+    def get_state(self):
+        """Returns deep copies of model weights and optimizer state."""
+        return {
+            "model": copy.deepcopy(self.model.state_dict()),
+            "opt": copy.deepcopy(self.opt.state_dict())
+        }
+
+    def load_state(self, state):
+        """Restores model weights and optimizer state."""
+        if "model" in state:
+            self.model.load_state_dict(state["model"])
+        if "opt" in state and state["opt"] is not None:
+            self.opt.load_state_dict(state["opt"])
+
     def fit(self, epochs, mu=0.0):
+        """Standard epoch fitting without callback."""
+        return self.fit_epochs(epochs, mu=mu)
+
+    def fit_epochs(self, epochs, mu=0.0, on_epoch=None, start_epoch=1):
         """mu > 0 adds FedProx's proximal term, client-side only -- per PRD
-        Section 7 / Methodology Section 7.2. mu=0 is standard FedAvg."""
+        Section 7 / Methodology Section 7.2. mu=0 is standard FedAvg.
+        Supports resume via start_epoch and periodic callback via on_epoch."""
         self.model.train()
         global_params = [p.detach().clone() for p in self.model.parameters()] if mu > 0 else None
         last = float("nan")
 
-        for _ in range(epochs):
+        for ep in range(start_epoch, epochs + 1):
             perm = torch.randperm(self.n, generator=self.gen)
             for i in range(0, self.n, self.batch_size):
                 idx = perm[i:i + self.batch_size]
@@ -64,6 +83,9 @@ class Client:
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5.0)
                 self.opt.step()
                 last = loss.item()
+
+            if on_epoch:
+                on_epoch(ep, last)
 
         return last
 
@@ -96,15 +118,57 @@ def fedavg(states, weights):
     return avg
 
 
-def run_federated(clients, rounds, local_epochs, test, log_every=1, on_round=None, mu=0.0):
+def safe_load_torch(path):
+    """Safely loads torch checkpoint, handling PyTorch 2.6+ weights_only defaults."""
+    try:
+        return torch.load(path, map_location="cpu", weights_only=False)
+    except TypeError:
+        return torch.load(path, map_location="cpu")
+
+
+def run_federated(
+    clients,
+    rounds,
+    local_epochs,
+    test,
+    log_every=1,
+    on_round=None,
+    mu=0.0,
+    resume_checkpoint_path=None,
+    save_checkpoint_path=None
+):
     """FedAvg / FedProx over `clients` for `rounds` rounds.
+    Supports seamless pausing and resuming across machine shutdowns.
     Returns the final global model and per-round metric history."""
     X_te, y_te, e_te = test
     global_model = MultipleRegression(num_features=clients[0].X.shape[1])
     global_state = copy.deepcopy(global_model.state_dict())
     history = []
+    start_round = 1
 
-    for r in range(1, rounds + 1):
+    # Check for existing checkpoint to resume from
+    if resume_checkpoint_path and os.path.exists(resume_checkpoint_path):
+        try:
+            ckpt = safe_load_torch(resume_checkpoint_path)
+            saved_round = ckpt.get("round", 0)
+            if saved_round < rounds:
+                start_round = saved_round + 1
+                global_state = ckpt["global_state"]
+                history = ckpt.get("history", [])
+                if "client_states" in ckpt:
+                    for c, s in zip(clients, ckpt["client_states"]):
+                        c.load_state(s)
+                print(f"[RESUME] Loaded checkpoint at round {saved_round}/{rounds}. Continuing from round {start_round}...")
+            elif saved_round >= rounds:
+                print(f"[RESUME] Checkpoint already completed all {rounds} rounds. Loading final state.")
+                global_state = ckpt["global_state"]
+                history = ckpt.get("history", [])
+                global_model.load_state_dict(global_state)
+                return global_model, history
+        except Exception as e:
+            print(f"[WARN] Failed to load resume checkpoint {resume_checkpoint_path}: {e}. Starting fresh.")
+
+    for r in range(start_round, rounds + 1):
         states, sizes, losses = [], [], []
         for c in clients:
             c.set_weights(global_state)
@@ -120,8 +184,24 @@ def run_federated(clients, rounds, local_epochs, test, log_every=1, on_round=Non
             m = evaluate(global_model, X_te, y_te, e_te)
             rec = {"round": r, "train_loss": float(np.mean(losses)), **m}
             history.append(rec)
+            if save_checkpoint_path:
+                ckpt_to_save = {
+                    "round": r,
+                    "global_state": global_state,
+                    "client_states": [c.get_state() for c in clients],
+                    "history": history,
+                }
+                torch.save(ckpt_to_save, save_checkpoint_path)
+
             if on_round:
                 on_round(rec)
 
     global_model.load_state_dict(global_state)
+    # Remove temporary resume file once run is fully complete
+    if save_checkpoint_path and os.path.exists(save_checkpoint_path):
+        try:
+            os.remove(save_checkpoint_path)
+        except Exception:
+            pass
+
     return global_model, history
