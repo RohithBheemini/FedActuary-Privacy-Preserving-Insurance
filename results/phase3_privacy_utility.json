@@ -1,0 +1,55 @@
+{
+  "config": {
+    "n_rows": 50000,
+    "epsilons": [
+      Infinity,
+      8.0,
+      3.0,
+      1.0
+    ],
+    "epochs": 5,
+    "batch_size": 500,
+    "lr": 0.001,
+    "seed": 42
+  },
+  "flat_clipping": [
+    {
+      "target_epsilon": Infinity,
+      "realized_epsilon": Infinity,
+      "pde": -1.1607910691528778,
+      "gini": 0.23337410448381823,
+      "checkpoint": "checkpoints/dp_eps_inf.pt"
+    },
+    {
+      "target_epsilon": 8.0,
+      "realized_epsilon": 6.747514822615008,
+      "pde": -1.218637803847833,
+      "gini": 0.23761383914477852,
+      "checkpoint": "checkpoints/dp_eps_8.0.pt"
+    },
+    {
+      "target_epsilon": 3.0,
+      "realized_epsilon": 2.476386620159567,
+      "pde": -1.2004734712897536,
+      "gini": 0.2378624619915637,
+      "checkpoint": "checkpoints/dp_eps_3.0.pt"
+    },
+    {
+      "target_epsilon": 1.0,
+      "realized_epsilon": 0.8877624664999442,
+      "pde": -1.1657072724702955,
+      "gini": 0.2380215798696389,
+      "checkpoint": "checkpoints/dp_eps_1.0.pt"
+    }
+  ],
+  "per_layer_extension": {
+    "target_epsilon": 3.0,
+    "clip_norms": [
+      0.8250865180485275,
+      0.5030253329523823,
+      0.2572892377346257
+    ],
+    "pde": -0.3252323143192015,
+    "gini": 0.23484860212515757
+  }
+}
