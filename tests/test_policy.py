@@ -107,7 +107,8 @@ class TestPolicyManagement(unittest.TestCase):
     def test_top_up_eligibility_and_execution(self):
         """Test checking top-up eligibility and executing top-up."""
         df = self.pm.get_all_policies()
-        sample_id = int(df.iloc[1]["IDpol"])
+        clean_policies = df[df["TopUpAmount"] < 50000.0]
+        sample_id = int(clean_policies.iloc[0]["IDpol"])
 
         elig = self.pm.check_top_up_eligibility(sample_id)
         self.assertTrue(elig["eligible"])

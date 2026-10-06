@@ -681,7 +681,7 @@ def log_fl_round(
 ) -> str:
     conn = get_db_connection()
     cursor = conn.cursor()
-    round_id = f"FL-RND-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+    round_id = f"FL-RND-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}-{int(datetime.datetime.now().microsecond / 1000)}"
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     if is_production:
@@ -703,9 +703,16 @@ def log_fl_round(
     return round_id
 
 
-def set_production_checkpoint(round_id: str) -> None:
+def set_production_checkpoint(round_id_or_path: str) -> bool:
     conn = get_db_connection()
     conn.execute("UPDATE fl_consortium_rounds SET is_production = 0;")
-    conn.execute("UPDATE fl_consortium_rounds SET is_production = 1 WHERE round_id = ?;", (round_id,))
+    cursor = conn.cursor()
+    cursor.execute("""
+    UPDATE fl_consortium_rounds
+    SET is_production = 1
+    WHERE round_id = ? OR model_checkpoint_path = ?;
+    """, (round_id_or_path, round_id_or_path))
+    updated = cursor.rowcount > 0
     conn.commit()
     conn.close()
+    return updated

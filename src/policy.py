@@ -295,6 +295,12 @@ class PolicyManager:
             "claims_by_area": claims_by_area,
             "claims_by_age": claims_by_age,
             "claim_distribution": {int(k): int(v) for k, v in claim_dist.items()},
+            # Compatibility aliases
+            "total_claims_count": total_claims_gen,
+            "total_claim_payout": round(total_claim_amount, 2),
+            "average_severity": round(avg_severity_per_claim, 2),
+            "distribution_by_region": {str(r["Region"]): int(r["TotalPolicies"]) for r in claims_by_region},
+            "distribution_by_driver_age_group": {str(r["AgeGroup"]): int(r["TotalPolicies"]) for r in claims_by_age},
         }
 
     # --------------------------------------------------------------------------

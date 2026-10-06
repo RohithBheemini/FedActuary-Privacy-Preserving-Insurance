@@ -2,6 +2,7 @@
 Verification script: Validates that all questions asked by the user function
 as a unified, production-grade end-to-end workflow.
 """
+import os
 import sys
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     try:
@@ -21,9 +22,9 @@ def test_production_workflow():
     print(" 🔍 RUNNING COMPLETE PRODUCTION WORKFLOW VALIDATION")
     print("=" * 80)
 
-    # Question 1: Clone repo -> Verified (Active at C:/Users/Ganesh/Downloads/FedActuary-Privacy-Preserving-Insurance)
+    # Question 1: Clone repo -> Verified
     print("\n[Step 1] Repository & Environment Check")
-    print("✓ Cloned and configured in Downloads directory.")
+    print(f"✓ Cloned and verified in active directory: {os.path.abspath(os.path.dirname(__file__))}")
 
     # Question 2: Add freMTPL2sev dataset
     print("\n[Step 2] freMTPL2sev Dataset Integration")

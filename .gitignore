@@ -8,6 +8,10 @@ __pycache__/
 venv/
 env/
 ENV/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
 
 # IDEs and OS metadata
 .vscode/

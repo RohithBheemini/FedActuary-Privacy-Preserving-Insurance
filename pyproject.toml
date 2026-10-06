@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fedactuary"
+version = "2.0.0"
+description = "Privacy-Preserving Federated Insurance Claims Prediction & Actuarial Platform"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "FedActuary Team" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+dependencies = [
+    "torch>=2.1.0",
+    "flwr>=1.30.0",
+    "scikit-learn>=1.5.0",
+    "pandas>=2.1.0",
+    "numpy>=1.26.0",
+    "scipy>=1.12.0",
+    "opacus>=1.4.0",
+    "shap>=0.45.0",
+    "streamlit>=1.38.0",
+    "plotly>=5.20.0",
+    "reportlab>=4.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.9.0",
+]
+
+[project.scripts]
+fedactuary = "src.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
