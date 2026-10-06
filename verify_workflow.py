@@ -15,6 +15,7 @@ import torch
 from src.data import load_severity_data, load_combined_policy_dataset, load_preprocessing_artifacts
 from src.model import MultipleRegression
 from src.policy import PolicyManager, BILLING_FREQUENCIES
+from src.config import CKPT_DIR, FEDERATED_CKPT
 
 
 def test_production_workflow():
@@ -100,9 +101,9 @@ def test_production_workflow():
 
     # Question 7: How we can change policy details and policy frequency
     print("\n[Step 7] Policy Endorsement & Frequency Adjustment with ML Re-Scoring")
-    scaler, feat_names = load_preprocessing_artifacts("checkpoints")
+    scaler, feat_names = load_preprocessing_artifacts(str(CKPT_DIR))
     model = MultipleRegression(num_features=len(feat_names))
-    model.load_state_dict(torch.load("checkpoints/federated.pt", map_location="cpu"))
+    model.load_state_dict(torch.load(str(FEDERATED_CKPT), map_location="cpu"))
     model.eval()
 
     res_details = pm.update_policy_details(
