@@ -180,3 +180,115 @@ def load_preprocessing_artifacts(out_dir: str):
     with open(os.path.join(out_dir, "feature_columns.json"), "r", encoding="utf-8") as f:
         feature_names = json.load(f)
     return scaler, feature_names
+
+
+def load_severity_data(csv_path: str = None) -> pd.DataFrame:
+    """
+    Loads raw freMTPL2sev data and performs validation/cleaning:
+    - IDpol: integer
+    - ClaimAmount: positive float
+    """
+    if csv_path is None:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        csv_path = os.path.join(base_dir, "data", "freMTPL2sev.csv")
+    
+    if not os.path.exists(csv_path):
+        raise FileNotFoundError(f"freMTPL2sev dataset not found at {csv_path}")
+
+    df_sev = pd.read_csv(csv_path)
+    df_sev["IDpol"] = pd.to_numeric(df_sev["IDpol"], errors="coerce").fillna(0).astype(int)
+    df_sev["ClaimAmount"] = pd.to_numeric(df_sev["ClaimAmount"], errors="coerce").fillna(0.0).clip(lower=0.0)
+    return df_sev
+
+
+def aggregate_severity_by_policy(df_sev: pd.DataFrame) -> pd.DataFrame:
+    """
+    Aggregates severity entries per policy ID (IDpol):
+    - SevClaimCount: number of claims filed
+    - TotalClaimAmount: total claim payout incurred
+    - AvgClaimAmount: average claim payout
+    - MaxClaimAmount: largest single claim payout
+    """
+    agg = df_sev.groupby("IDpol").agg(
+        SevClaimCount=("ClaimAmount", "count"),
+        TotalClaimAmount=("ClaimAmount", "sum"),
+        AvgClaimAmount=("ClaimAmount", "mean"),
+        MaxClaimAmount=("ClaimAmount", "max")
+    ).reset_index()
+    return agg
+
+
+def load_combined_policy_dataset(
+    freq_path: str = None,
+    sev_path: str = None,
+    n_rows: int = None,
+    seed: int = 42,
+    default_coverage_limit: float = 50000.0
+) -> pd.DataFrame:
+    """
+    Combines freMTPL2freq and freMTPL2sev into an actuarial policy portfolio dataset.
+    Provides policy details, claims incurred, coverage limits, remaining claims,
+    and policy frequency.
+    """
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if freq_path is None:
+        freq_path = os.path.join(base_dir, "data", "freMTPL2freq.csv")
+    if sev_path is None:
+        sev_path = os.path.join(base_dir, "data", "freMTPL2sev.csv")
+
+    if not os.path.exists(freq_path):
+        raise FileNotFoundError(f"freMTPL2freq dataset not found at {freq_path}")
+
+    df_freq = pd.read_csv(freq_path)
+    if n_rows is not None:
+        df_freq = df_freq.sample(n=n_rows, random_state=seed).reset_index(drop=True)
+
+    df_freq["IDpol"] = pd.to_numeric(df_freq["IDpol"], errors="coerce").fillna(0).astype(int)
+    df_freq["ClaimNb"] = pd.to_numeric(df_freq["ClaimNb"], errors="coerce").fillna(0).astype(int)
+
+    # Load and aggregate severity
+    if os.path.exists(sev_path):
+        df_sev = load_severity_data(sev_path)
+        sev_agg = aggregate_severity_by_policy(df_sev)
+        merged = df_freq.merge(sev_agg, on="IDpol", how="left")
+    else:
+        merged = df_freq.copy()
+        merged["SevClaimCount"] = 0
+        merged["TotalClaimAmount"] = 0.0
+        merged["AvgClaimAmount"] = 0.0
+        merged["MaxClaimAmount"] = 0.0
+
+    merged["SevClaimCount"] = merged["SevClaimCount"].fillna(0).astype(int)
+    merged["TotalClaimAmount"] = merged["TotalClaimAmount"].fillna(0.0).round(2)
+    merged["AvgClaimAmount"] = merged["AvgClaimAmount"].fillna(0.0).round(2)
+    merged["MaxClaimAmount"] = merged["MaxClaimAmount"].fillna(0.0).round(2)
+
+    # Policy limit & remaining claim features
+    merged["BaseCoverageLimit"] = float(default_coverage_limit)
+    merged["TopUpAmount"] = 0.0
+    merged["TotalCoverageLimit"] = merged["BaseCoverageLimit"] + merged["TopUpAmount"]
+    merged["RemainingClaimAmount"] = np.maximum(0.0, merged["TotalCoverageLimit"] - merged["TotalClaimAmount"]).round(2)
+    merged["ClaimUtilizationPct"] = np.round(
+        np.clip((merged["TotalClaimAmount"] / merged["TotalCoverageLimit"]) * 100.0, 0.0, 100.0), 2
+    )
+
+    # Policy terms & billing frequency
+    merged["PolicyFrequency"] = "Annual"
+    
+    # Actuarial base premium approximation (Base rate * BonusMalus factor * VehPower factor)
+    base_rate = 250.0
+    bm_factor = merged["BonusMalus"] / 100.0
+    pwr_factor = np.clip(merged["VehPower"] / 6.0, 0.8, 2.0)
+    merged["AnnualPremium"] = np.round(base_rate * bm_factor * pwr_factor, 2)
+
+    # Policy status
+    conditions = [
+        (merged["RemainingClaimAmount"] <= 0),
+        (merged["ClaimUtilizationPct"] >= 80.0),
+        (merged["ClaimUtilizationPct"] > 0),
+    ]
+    choices = ["Limit Exhausted", "Critical (Near Limit)", "Active with Claims"]
+    merged["PolicyStatus"] = np.select(conditions, choices, default="Active (Clean)")
+
+    return merged
+
