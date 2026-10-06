@@ -1105,7 +1105,7 @@ elif selected_role == "Consortium Operations":
     # -------------------------------------------------------------------------
     elif active_page == "Privacy-Utility Pareto Curve":
         st.markdown("### Differential Privacy vs. Actuarial Utility Pareto Frontier")
-        st.markdown("Visualizing the privacy-utility tradeoff under Opacus DP-SGD ($\delta = 10^{-5}$) across $\varepsilon \in \{\infty, 8, 3, 1\}$.")
+        st.markdown(r"Visualizing the privacy-utility tradeoff under Opacus DP-SGD ($\delta = 10^{-5}$) across $\varepsilon \in \{\infty, 8, 3, 1\}$.")
 
         pareto_data = [
             {"Epsilon": "ε = 1.0", "Eps_Val": 1.0, "%PDE": -1.166, "Gini": 0.238, "Guarantee": "Strict Privacy (High Noise)"},
