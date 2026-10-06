@@ -616,6 +616,7 @@ class PolicyManager:
             "id_pol": id_pol,
             "top_up_amount": top_up_amount,
             "premium_charge": premium_charge,
+            "prorated_premium": premium_charge,
             "new_total_limit": updated_claim["total_coverage_limit"],
             "new_remaining_claim": updated_claim["remaining_claim_amount"],
             "new_utilization_pct": updated_claim["claim_utilization_pct"],

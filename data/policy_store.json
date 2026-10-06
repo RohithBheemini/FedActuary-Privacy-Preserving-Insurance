@@ -2,36 +2,8 @@
   "424": {
     "top_ups": [
       {
-        "tx_id": "TOP-20261006184403-927",
-        "timestamp": "2026-10-06 18:44:03",
-        "amount": 10000.0,
-        "premium_charge": 40.0,
-        "notes": "Production workflow top-up test"
-      },
-      {
-        "tx_id": "TOP-20261006185708-300",
-        "timestamp": "2026-10-06 18:57:08",
-        "amount": 10000.0,
-        "premium_charge": 40.0,
-        "notes": "Production workflow top-up test"
-      },
-      {
-        "tx_id": "TOP-20261006190119-452",
-        "timestamp": "2026-10-06 19:01:19",
-        "amount": 10000.0,
-        "premium_charge": 40.0,
-        "notes": "Production workflow top-up test"
-      },
-      {
-        "tx_id": "TOP-20261006190733-543",
-        "timestamp": "2026-10-06 19:07:33",
-        "amount": 10000.0,
-        "premium_charge": 40.0,
-        "notes": "Production workflow top-up test"
-      },
-      {
-        "tx_id": "TOP-20261006193152-314",
-        "timestamp": "2026-10-06 19:31:52",
+        "tx_id": "TOP-20261006194359-462",
+        "timestamp": "2026-10-06 19:43:59",
         "amount": 10000.0,
         "premium_charge": 40.0,
         "notes": "Production workflow top-up test"
@@ -39,76 +11,8 @@
     ],
     "endorsements": [
       {
-        "tx_id": "END-20261006184403-481",
-        "timestamp": "2026-10-06 18:44:03",
-        "old_values": {
-          "DrivAge": 53,
-          "VehPower": 8,
-          "Area": "C"
-        },
-        "new_values": {
-          "DrivAge": 53,
-          "VehPower": 8,
-          "Area": "C"
-        },
-        "notes": "Production workflow endorsement",
-        "pred_before": 0.0742,
-        "pred_after": 0.0742
-      },
-      {
-        "tx_id": "END-20261006185708-370",
-        "timestamp": "2026-10-06 18:57:08",
-        "old_values": {
-          "DrivAge": 53,
-          "VehPower": 8,
-          "Area": "C"
-        },
-        "new_values": {
-          "DrivAge": 53,
-          "VehPower": 8,
-          "Area": "C"
-        },
-        "notes": "Production workflow endorsement",
-        "pred_before": 0.0742,
-        "pred_after": 0.0742
-      },
-      {
-        "tx_id": "END-20261006190119-417",
-        "timestamp": "2026-10-06 19:01:19",
-        "old_values": {
-          "DrivAge": 53,
-          "VehPower": 8,
-          "Area": "C"
-        },
-        "new_values": {
-          "DrivAge": 53,
-          "VehPower": 8,
-          "Area": "C"
-        },
-        "notes": "Production workflow endorsement",
-        "pred_before": 0.0741,
-        "pred_after": 0.0741
-      },
-      {
-        "tx_id": "END-20261006190733-965",
-        "timestamp": "2026-10-06 19:07:33",
-        "old_values": {
-          "DrivAge": 53,
-          "VehPower": 8,
-          "Area": "C"
-        },
-        "new_values": {
-          "DrivAge": 53,
-          "VehPower": 8,
-          "Area": "C"
-        },
-        "notes": "Production workflow endorsement",
-        "pred_before": 0.074,
-        "pred_after": 0.074
-      },
-      {
-        "tx_id": "END-20261006193152-175",
-        "timestamp": "2026-10-06 19:31:52",
+        "tx_id": "END-20261006194359-429",
+        "timestamp": "2026-10-06 19:43:59",
         "old_values": {
           "DrivAge": 53,
           "VehPower": 8,
@@ -132,96 +36,13 @@
     "frequency": "Monthly",
     "frequency_history": [
       {
-        "tx_id": "FREQ-20261006184403-942",
-        "timestamp": "2026-10-06 18:44:03",
+        "tx_id": "FREQ-20261006194359-390",
+        "timestamp": "2026-10-06 19:43:59",
         "old_frequency": "Monthly",
         "new_frequency": "Monthly",
         "installment_amount": 46.32,
         "installments_per_year": 12,
         "total_annualized": 555.84
-      },
-      {
-        "tx_id": "FREQ-20261006185708-154",
-        "timestamp": "2026-10-06 18:57:08",
-        "old_frequency": "Monthly",
-        "new_frequency": "Monthly",
-        "installment_amount": 46.32,
-        "installments_per_year": 12,
-        "total_annualized": 555.84
-      },
-      {
-        "tx_id": "FREQ-20261006190119-904",
-        "timestamp": "2026-10-06 19:01:19",
-        "old_frequency": "Monthly",
-        "new_frequency": "Monthly",
-        "installment_amount": 46.32,
-        "installments_per_year": 12,
-        "total_annualized": 555.84
-      },
-      {
-        "tx_id": "FREQ-20261006190733-982",
-        "timestamp": "2026-10-06 19:07:33",
-        "old_frequency": "Monthly",
-        "new_frequency": "Monthly",
-        "installment_amount": 46.32,
-        "installments_per_year": 12,
-        "total_annualized": 555.84
-      },
-      {
-        "tx_id": "FREQ-20261006193152-541",
-        "timestamp": "2026-10-06 19:31:52",
-        "old_frequency": "Monthly",
-        "new_frequency": "Monthly",
-        "installment_amount": 46.32,
-        "installments_per_year": 12,
-        "total_annualized": 555.84
-      }
-    ]
-  },
-  "49": {
-    "top_ups": [
-      {
-        "tx_id": "TOP-20261006184439-936",
-        "timestamp": "2026-10-06 18:44:39",
-        "amount": 10000.0,
-        "premium_charge": 20.0,
-        "notes": "Demo coverage top-up replenishment"
-      }
-    ],
-    "endorsements": [
-      {
-        "tx_id": "END-20261006184439-526",
-        "timestamp": "2026-10-06 18:44:39",
-        "old_values": {
-          "DrivAge": 35,
-          "VehPower": 6,
-          "Area": "C"
-        },
-        "new_values": {
-          "DrivAge": 36,
-          "VehPower": 5,
-          "Area": "B"
-        },
-        "notes": "Annual review & vehicle power adjustment endorsement",
-        "pred_before": 0.0486,
-        "pred_after": 0.0496
-      }
-    ],
-    "details": {
-      "DrivAge": 36,
-      "VehPower": 5,
-      "Area": "B"
-    },
-    "frequency": "Monthly",
-    "frequency_history": [
-      {
-        "tx_id": "FREQ-20261006184439-949",
-        "timestamp": "2026-10-06 18:44:39",
-        "old_frequency": "Annual",
-        "new_frequency": "Monthly",
-        "installment_amount": 22.07,
-        "installments_per_year": 12,
-        "total_annualized": 264.84
       }
     ]
   }

@@ -186,8 +186,8 @@ def cmd_top_up(args):
         print(f"  ✓ TOP-UP SUCCESSFULLY APPLIED!")
         print(f"  • Transaction ID:     {res['tx_id']}")
         print(f"  • Policy ID:          #{args.id_pol}")
-        print(f"  • Amount Added:       €{res['top_up_amount']:,.2f}")
-        print(f"  • Premium Charged:    €{res['prorated_premium']:,.2f}")
+        prem_val = res.get('premium_charge', res.get('prorated_premium', 0.0))
+        print(f"  • Premium Charged:    €{prem_val:,.2f}")
         print(f"  • New Total Limit:    €{res['new_total_limit']:,.2f}")
         print(f"  • New Remaining:      €{res['new_remaining_claim']:,.2f}")
     else:

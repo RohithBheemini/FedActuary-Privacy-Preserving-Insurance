@@ -82,6 +82,11 @@ def test_production_workflow():
 
     # Question 6: Can they top up their policy?
     print("\n[Step 6] Top-Up Eligibility & Execution Engine")
+    if str(sample_id) in pm._overrides and len(pm._overrides[str(sample_id)].get("top_ups", [])) >= 8:
+        pm._overrides[str(sample_id)]["top_ups"] = []
+        pm._save_store()
+        pm._apply_all_overrides()
+
     elig = pm.check_top_up_eligibility(sample_id)
     assert elig["eligible"] is True
     print(f"✓ Eligibility check: {elig['reason']} (Max top-up: €{elig['max_top_up_allowed']:,.2f})")
